@@ -1,0 +1,16 @@
+Day,Focus,Activities
+Day 16,Strategy/Decorator/Adapter,Refactor a service with Strategy; add caching Decorator; contract tests for Adapter
+Day 17,Chain of Responsibility,Validation pipeline; structured logs with trace_id; fallback paths
+Day 18,Circuit Breaker & Retry,Implement breaker; jittered retries; failure injection & metrics
+Day 19,Outbox,Tx + outbox table; publisher worker; idempotent publish; clean-up job
+Day 20,Saga/Orchestration,Orchestrate reserve→charge→confirm with compensations; DLQ replay
+Day 21,CQRS,Split command & query; read model denormalization; eventual consistency demo
+Day 22,Hexagonal,Ports & Adapters; replace partner provider via DI; integration tests
+Day 23,Repository + Specification,Compose filters; compare with simple query approach
+Day 24,Security (OWASP),AuthZ policies; signed URLs; audit logging; secrets hygiene
+Day 25,Observability Deep Dive,APM traces; OpenTelemetry; queue lag metrics; SLOs & alerts
+Day 26,Performance Lab,Profile N+1; EXPLAIN; cache hit ratio; FE render profiling
+Day 27,RSC & Streaming,"Server data, client islands; Suspense boundaries; bundle analysis"
+Day 28,Testing Advanced,"Contract tests, property-based tests, Pact-like consumer tests"
+Day 29,Ops & Releases,"Feature flags, migrations safety, blue/green; incident drills"
+Day 30,Capstone,Build mini system: import→process→export with patterns & dashboards

@@ -1,0 +1,16 @@
+Day,Backend Focus,Activities
+Day 1,Laravel Eloquent Advanced,"Eager loading, scopes, subqueries; React Hooks refresh; EN: self-intro"
+Day 2,Pagination & Streaming,"chunkById, keyset; CSV export stream; EN: describe project"
+Day 3,MySQL Indexing & EXPLAIN,"Composite/covering index, histograms; FE: TanStack Query; EN: Q&A 1"
+Day 4,Transactions & Deadlocks,Retry with backoff; FE: debounce/AbortController; EN: Q&A 2
+Day 5,Caching & Redis,"Cache-aside, tags; FE: virtualization; EN: STAR story 1"
+Day 6,Queues & SQS,"Visibility timeout, DLQ; FE: code-splitting; EN: STAR story 2"
+Day 7,Security & Auth,"Sanctum/JWT, CSRF/CORS; FE: form/a11y; EN: mock HR 1"
+Day 8,System Design 1,Import pipeline 10M rows; FE: error boundaries; EN: mock tech 1
+Day 9,System Design 2,Webhook verify+replay; FE: RSC overview; EN: mock tech 2
+Day 10,Observability,Logs/metrics/traces; FE: web-vitals; EN: metrics language
+Day 11,Performance Lab,Profile queries; FE: optimize renders; EN: summarize solution
+Day 12,Integration,Mini fullstack app (auth+CRUD+queue); EN: dry run
+Day 13,Coding Test,LeetCode SQL+Array; FE: component task; EN: interview pacing
+Day 14,Full Review,Flashcards BE/FE; EN: review all
+Day 15,Rest & Polish,Light review; prepare questions; EN: confidence drills
