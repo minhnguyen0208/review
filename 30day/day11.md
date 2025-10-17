@@ -1,110 +1,134 @@
-# Day 11 — Advanced Aggregations & Reporting (Window Functions) | React Error Boundaries & Suspense
+# Day 11 — API Documentation (OpenAPI/Resources) | React API Client & Error Boundaries
 
 ### Plan Notes (mục tiêu & phạm vi ôn tập trong ngày)
-**Backend (Laravel + MySQL)**
-- window functions, reporting queries
-- optimize grouping
-- json aggregation patterns
-- **Query Optimization**: đọc `EXPLAIN/ANALYZE`; hành động sau plan (index/viết lại).
-- **JSON_ARRAYAGG** trong `GROUP BY` để gom object con theo nhóm.
-- **Sargable predicates**; **composite/covering index** khớp `WHERE` + `ORDER BY`.
+**Backend (Laravel)**
+- OpenAPI (yaml), Laravel API Resources, request/response examples, versioning
 **Frontend (React)**
-- error boundaries, suspense for data fetching
+- API client wrapper (fetch), error boundary, retry/backoff
 **Notes**
-- include EXPLAIN ANALYZE, histograms decision, sargable rewrite
+- Follow CSV if present
 
 ---
 
 ## Backend (BE)
-> **Mục tiêu phỏng vấn:** dùng window functions/JSON aggregation hợp lý, và tối ưu sau khi đọc EXPLAIN.
-**Window functions — rolling sums/top-N per group**
-```sql
-SELECT
-  p.author_id,
-  p.id,
-  p.created_at,
-  ROW_NUMBER() OVER (PARTITION BY p.author_id ORDER BY p.created_at DESC) AS rn,
-  SUM(p.views) OVER (PARTITION BY p.author_id ORDER BY p.created_at ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS views_7_posts
-FROM posts p
-WHERE p.created_at >= CURDATE() - INTERVAL 90 DAY;
--- Top 3 bài gần nhất theo author: WHERE rn <= 3
-```
-**JSON_ARRAYAGG theo nhóm**
-```sql
-SELECT
-  u.id AS author_id,
-  JSON_ARRAYAGG(JSON_OBJECT('id',p.id,'title',p.title) ORDER BY p.created_at DESC) AS recent_posts
-FROM users u
-LEFT JOIN posts p ON p.author_id = u.id
-GROUP BY u.id;
-```
-**EXPLAIN → Hậu kiểm & tối ưu**
-- Nếu `type=ALL` trên `posts` → thêm index theo thời gian/author (vd `(author_id, created_at DESC)`).
-- Nếu `Using temporary`/`Using filesort` ở GROUP BY → giảm select list, cân nhắc `ANY_VALUE()` hoặc materialize trước khi group.
-- Nếu pred không sargable (`DATE(p.created_at)=...`) → rewrite thành range.
-- Chạy `ANALYZE TABLE` sau thay đổi lớn; cân nhắc **histogram** cho cột skewed.
+> **Mục tiêu phỏng vấn:** trình bày API rõ ràng, sample request/response nhất quán, và có chiến lược versioning.
 
-**Laravel snippet (Query Builder)**
-```php
-$res = DB::table('posts as p')
-  ->selectRaw("p.author_id, p.id, p.created_at,
-               ROW_NUMBER() OVER (PARTITION BY p.author_id ORDER BY p.created_at DESC) as rn")
-  ->where('p.created_at','>=', now()->subDays(90))
-  ->orderByDesc('p.created_at')
-  ->limit(1000)
-  ->get();
+**OpenAPI (trích đoạn)**
+```yaml
+openapi: 3.0.3
+info:
+  title: Sample API
+  version: 1.0.0
+paths:
+  /posts:
+    get:
+      summary: List posts
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostCollection'
+components:
+  schemas:
+    Post:
+      type: object
+      properties: { id: {type: integer}, title: {type: string} }
+    PostCollection:
+      type: object
+      properties: { data: { type: array, items: { $ref: '#/components/schemas/Post' } } }
 ```
+
+**Laravel API Resource**
+```php
+class PostResource extends JsonResource { public function toArray($req){
+  return ['id'=>$this->id,'title'=>$this->title,'created_at'=>$this->created_at];
+}}
+```
+
+### Query Optimization (Supplement)
+> Chủ đề mới (khác Day 9/10): **Partitioning**, **Temporary tables & join buffer**, **optimizer_switch** (quan sát, không ép buộc).
+
+**Range Partitioning (date)**
+```sql
+ALTER TABLE events PARTITION BY RANGE (YEAR(created_at)) (
+  PARTITION p2023 VALUES LESS THAN (2024),
+  PARTITION p2024 VALUES LESS THAN (2025),
+  PARTITION pmax  VALUES LESS THAN MAXVALUE
+);
+-- Chỉ cân nhắc nếu bảng cực lớn và queries theo range năm/tháng.
+```
+
+**Temporary table vs Derived**
+```sql
+CREATE TEMPORARY TABLE recent_ids (id BIGINT PRIMARY KEY);
+INSERT INTO recent_ids SELECT id FROM posts WHERE created_at >= NOW() - INTERVAL 7 DAY;
+SELECT p.* FROM posts p JOIN recent_ids r ON r.id = p.id;
+-- Đo trước/sau: đôi khi tmp table giúp avoid re-scan/duplicate work.
+```
+
+**Join Buffer & optimizer_switch (read-only)**
+```sql
+SET SESSION optimizer_switch='block_nested_loop=on';
+-- Chỉ dùng để quan sát behavior trong môi trường test, không kết luận vội.
+```
+
 
 ---
 
 ## Frontend (FE)
-> **Mục tiêu phỏng vấn:** bảo vệ UI với Error Boundaries, cân nhắc Suspense đúng chỗ.
-**Error Boundary (TypeScript)**
-```tsx
-import React from 'react';
+> **Mục tiêu phỏng vấn:** API layer gọn, xử lý lỗi/ retry có kiểm soát, UI không sập.
 
-type State = { hasError: boolean };
-export class ErrorBoundary extends React.Component<React.PropsWithChildren, State>{
-  state: State = { hasError: false };
-  static getDerivedStateFromError(){ return { hasError: true }; }
-  componentDidCatch(err: any){ console.error(err); }
+**API client wrapper (fetch + retry)**
+```ts
+async function api(path: string, init: RequestInit = {}, retries=1){
+  const r = await fetch(path, { ...init, headers: { 'Content-Type':'application/json', ...(init.headers||{}) } });
+  if(!r.ok && retries>0 && r.status >=500){
+    await new Promise(res=>setTimeout(res, 300));
+    return api(path, init, retries-1);
+  }
+  return r;
+}
+```
+
+**Error Boundary**
+```tsx
+class ErrorBoundary extends React.Component<any, {hasError:boolean}>{
+  constructor(props:any){ super(props); this.state={hasError:false}; }
+  static getDerivedStateFromError(){ return {hasError:true}; }
   render(){ return this.state.hasError ? <p role="alert">Something went wrong.</p> : this.props.children; }
 }
 ```
-**Suspense integration (optional)**
-```tsx
-// With React Query experimental suspense: <React.Suspense fallback="Loading..."><Page/></React.Suspense>
-```
+
 
 ---
 
 ## English for Interview (skills only)
-**Behavioral — Performance Incident**
-- *Situation*: Report page timed out after data growth.
-- *Action*: Added composite index `(author_id, created_at)`, rewrote date predicate to a range, replaced OFFSET with keyset; verified with `EXPLAIN ANALYZE`.
-- *Result*: P95 dropped from 3.2s → 480ms; CPU/IO reduced significantly.
-
-- Explain a performance incident and how you fixed it with indexing/rewrites
+Explain an API to a non-technical stakeholder
 
 ---
 
 ### Activity
-- Viết 1 truy vấn window function + kiểm tra EXPLAIN.
-- Gom dữ liệu bằng JSON_ARRAYAGG theo nhóm; đo kích thước JSON.
-- Ghi 3 hành động tối ưu cụ thể sau khi đọc plan.
+- Viết trích đoạn OpenAPI cho `/posts` và `/posts/{id}`.
+- Tạo PostResource + ví dụ response.
+- Benchmark một truy vấn sau khi bật/tắt partition prune (nếu có).
 
 ### Practice Tasks
-- Thêm index phục vụ query window/nhóm; kiểm tra lại EXPLAIN.
-- BE endpoint trả aggregate cần thiết; FE demo error boundary bọc quanh list.
-- Ghi note before/after (rows/Extra/latency).
+- Viết OpenAPI trích đoạn + PostResource.
+- FE: tạo API wrapper + ErrorBoundary demo.
+- (Supplement) Thử 1 trong 3 tối ưu (partition/tmp table/optimizer_switch) và ghi nhận trước/sau.
 
 ### Acceptance Criteria
-- EXPLAIN cho query chính không còn full scan/ filesort (khi khả thi).
-- Endpoint trả dữ liệu đúng; error boundary hoạt động khi mock lỗi.
-- Có ghi chú tối ưu rõ ràng (index/viết lại).
+- Spec & Resource đồng bộ (field khớp, kiểu dữ liệu chuẩn).
+- FE wrapper hoạt động; ErrorBoundary hiển thị an toàn.
+- Ghi chú đo đạc bổ sung rõ ràng, không thay thế chủ đề BE chính.
 
 ### Docs & References
-- MySQL Window Functions: https://dev.mysql.com/doc/refman/8.0/en/window-functions.html
-- MySQL EXPLAIN/ANALYZE: https://dev.mysql.com/doc/refman/8.0/en/explain-output.html
-- Laravel Query Builder: https://laravel.com/docs/queries
-- React Error Boundaries: https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary
+- OpenAPI: https://spec.openapis.org/oas/latest.html
+- Laravel Resources: https://laravel.com/docs/eloquent-resources
+- React Error Boundaries: https://react.dev/reference/react/Component#error-handling
